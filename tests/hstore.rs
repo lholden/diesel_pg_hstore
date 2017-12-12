@@ -23,7 +23,7 @@ fn connection() -> PgConnection {
 
 table! {
     use diesel::types::*;
-    use diesel_hstore::db::Hstore;
+    use diesel_hstore::Hstore;
 
     hstore_table {
         id -> Integer,

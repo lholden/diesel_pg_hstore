@@ -7,11 +7,6 @@ use std::collections::HashMap;
 use std::collections::hash_map::*;
 use std::iter::FromIterator;
 
-pub mod db {
-    #[derive(Debug, Clone, Copy, Default)]
-    pub struct Hstore;
-}
-
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Hstore(HashMap<String, Option<String>>);
 
@@ -182,17 +177,17 @@ mod impls {
     use diesel::row::Row;
     use diesel::types::*;
 
-    use super::{db, Hstore};
+    use super::Hstore;
 
-    impl HasSqlType<db::Hstore> for Pg {
+    impl HasSqlType<Hstore> for Pg {
         fn metadata(lookup: &Self::MetadataLookup) -> Self::TypeMetadata {
             lookup.lookup_type("hstore")
         }
     }
 
-    impl NotNull for db::Hstore {}
-    impl SingleValue for db::Hstore {}
-    impl Queryable<db::Hstore, Pg> for Hstore {
+    impl NotNull for Hstore {}
+    impl SingleValue for Hstore {}
+    impl Queryable<Hstore, Pg> for Hstore {
         type Row = Self;
 
         fn build(row: Self::Row) -> Self {
@@ -200,15 +195,15 @@ mod impls {
         }
     }
 
-    impl<'a> AsExpression<db::Hstore> for &'a Hstore {
-        type Expression = Bound<db::Hstore, &'a Hstore>;
+    impl<'a> AsExpression<Hstore> for &'a Hstore {
+        type Expression = Bound<Hstore, &'a Hstore>;
 
         fn as_expression(self) -> Self::Expression {
             Bound::new(self)
         }
     }
 
-    impl FromSql<db::Hstore, Pg> for Hstore {
+    impl FromSql<Hstore, Pg> for Hstore {
         fn from_sql(bytes: Option<&[u8]>) -> Result<Self, Box<Error + Send + Sync>> {
             let mut buf = match bytes {
                 Some(bytes) => bytes,
@@ -237,13 +232,13 @@ mod impls {
         }
     }
 
-    impl FromSqlRow<db::Hstore, Pg> for Hstore {
+    impl FromSqlRow<Hstore, Pg> for Hstore {
         fn build_from_row<T: Row<Pg>>(row: &mut T) -> Result<Self, Box<Error + Send + Sync>> {
             Hstore::from_sql(row.take())
         }
     }
 
-    impl ToSql<db::Hstore, Pg> for Hstore {
+    impl ToSql<Hstore, Pg> for Hstore {
         fn to_sql<W>(&self, out: &mut ToSqlOutput<W, Pg>) -> Result<IsNull, Box<Error + Send + Sync>>
             where W: Write
         {
