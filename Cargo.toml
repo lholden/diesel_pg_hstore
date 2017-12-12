@@ -1,6 +1,6 @@
 [package]
 name = "diesel_pg_hstore"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Lori Holden <noreply@loriholden.com>"]
 description = "Postgres Hstore support for Diesel"
 

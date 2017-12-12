@@ -75,7 +75,7 @@
 //!
 //! fn main() {
 //!     let mut settings = HashMap::new();
-//!     settings.insert("Hello".to_string(), Some("World".to_string()));
+//!     settings.insert("Hello".to_string(), "World".to_string());
 //!
 //!     let profile = NewUserProfile { settings: Hstore::from_hashmap(settings) };
 //! }
@@ -88,15 +88,12 @@
 //! use diesel_pg_hstore::Hstore;
 //!
 //! let mut things = Hstore::new();
-//! things.insert("Hello".into(), Some("World".into()));
+//! things.insert("Hello".into(), "World".into());
 //! ```
 //!
 //! ### Nullable hstore values
 //!
-//! The postgres hstore type allows nulls in the value fields. Because of this, we made a
-//! compromise by making the `Hstore` type a wrapper around `HashMap<String, Option<String>>`.
-//! We may consider adding a type in the future that instead of using Option for the value type
-//! instead explicitly throws an error when encountering NULL values.
+//! Postgres hstore entries having a null value are simply ignored.
 
 extern crate diesel;
 extern crate byteorder;
@@ -109,7 +106,7 @@ use std::iter::FromIterator;
 
 /// The Hstore wrapper type.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Hstore(HashMap<String, Option<String>>);
+pub struct Hstore(HashMap<String, String>);
 
 /// You can deref the Hstore into it's backing HashMap
 ///
@@ -118,11 +115,11 @@ pub struct Hstore(HashMap<String, Option<String>>);
 /// use std::collections::HashMap;
 ///
 /// let mut settings = Hstore::new();
-/// settings.insert("Hello".into(), Some("World".into()));
-/// let hashmap: &HashMap<String, Option<String>> = &*settings;
+/// settings.insert("Hello".into(), "World".into());
+/// let hashmap: &HashMap<String, String> = &*settings;
 /// ```
 impl Deref for Hstore {
-    type Target = HashMap<String, Option<String>>;
+    type Target = HashMap<String, String>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -136,11 +133,11 @@ impl Deref for Hstore {
 /// use std::collections::HashMap;
 ///
 /// let mut settings = Hstore::new();
-/// settings.insert("Hello".into(), Some("World".into()));
-/// let mut hashmap: &mut HashMap<String, Option<String>> = &mut *settings;
+/// settings.insert("Hello".into(), "World".into());
+/// let mut hashmap: &mut HashMap<String, String> = &mut *settings;
 /// ```
 impl DerefMut for Hstore {
-    fn deref_mut(&mut self) -> &mut HashMap<String, Option<String>> {
+    fn deref_mut(&mut self) -> &mut HashMap<String, String> {
         &mut self.0
     }
 }
@@ -158,11 +155,11 @@ impl Hstore {
     /// use std::collections::HashMap;
     ///
     /// let mut settings = HashMap::new();
-    /// settings.insert("Hello".into(), Some("World".into()));
+    /// settings.insert("Hello".into(), "World".into());
     ///
     /// let settings_hstore = Hstore::from_hashmap(settings);
     /// ```
-    pub fn from_hashmap(hm: HashMap<String, Option<String>>) -> Hstore {
+    pub fn from_hashmap(hm: HashMap<String, String>) -> Hstore {
         Hstore(hm)
     }
 
@@ -187,32 +184,32 @@ impl Hstore {
     }
 
     /// Please see [HashMap.keys](#method.keys-1)
-    pub fn keys(&self) -> Keys<String, Option<String>> {
+    pub fn keys(&self) -> Keys<String, String> {
         self.0.keys()
     }
 
     /// Please see [HashMap.values](#method.values-1)
-    pub fn values(&self) -> Values<String, Option<String>> {
+    pub fn values(&self) -> Values<String, String> {
         self.0.values()
     }
 
     /// Please see [HashMap.values_mut](#method.values_mut-1)
-    pub fn values_mut(&mut self) -> ValuesMut<String, Option<String>> {
+    pub fn values_mut(&mut self) -> ValuesMut<String, String> {
         self.0.values_mut()
     }
 
     /// Please see [HashMap.iter](#method.iter-1)
-    pub fn iter(&self) -> Iter<String, Option<String>> {
+    pub fn iter(&self) -> Iter<String, String> {
         self.0.iter()
     }
 
     /// Please see [HashMap.iter_mut](#method.iter_mut-1)
-    pub fn iter_mut(&mut self) -> IterMut<String, Option<String>> {
+    pub fn iter_mut(&mut self) -> IterMut<String, String> {
         self.0.iter_mut()
     }
 
     /// Please see [HashMap.entry](#method.entry-1)
-    pub fn entry(&mut self, key: String) -> Entry<String, Option<String>> {
+    pub fn entry(&mut self, key: String) -> Entry<String, String> {
         self.0.entry(key)
     }
 
@@ -227,7 +224,7 @@ impl Hstore {
     }
 
     /// Please see [HashMap.drain](#method.drain-1)
-    pub fn drain(&mut self) -> Drain<String, Option<String>> {
+    pub fn drain(&mut self) -> Drain<String, String> {
         self.0.drain()
     }
 
@@ -237,12 +234,12 @@ impl Hstore {
     }
 
     /// Please see [HashMap.get](#method.gt-1)
-    pub fn get(&self, k: &str) -> Option<&Option<String>> {
+    pub fn get(&self, k: &str) -> Option<&String> {
         self.0.get(k)
     }
 
     /// Please see [HashMap.get_mut](#method.get_mut-1)
-    pub fn get_mut(&mut self, k: &str) -> Option<&mut Option<String>> {
+    pub fn get_mut(&mut self, k: &str) -> Option<&mut String> {
         self.0.get_mut(k)
     }
 
@@ -252,26 +249,26 @@ impl Hstore {
     }
 
     /// Please see [HashMap.insert](#method.insert-1)
-    pub fn insert(&mut self, k: String, v: Option<String>) -> Option<Option<String>> {
+    pub fn insert(&mut self, k: String, v: String) -> Option<String> {
         self.0.insert(k, v)
     }
 
     /// Please see [HashMap.remove](#method.remove-1)
-    pub fn remove(&mut self, k: &str) -> Option<Option<String>> {
+    pub fn remove(&mut self, k: &str) -> Option<String> {
         self.0.remove(k)
     }
 
     /// Please see [HashMap.retain](#method.retain-1)
     pub fn retain<F>(&mut self, f: F)
-        where F: FnMut(&String, &mut Option<String>) -> bool
+        where F: FnMut(&String, &mut String) -> bool
     {
         self.0.retain(f)
     }
 }
 
 impl IntoIterator for Hstore {
-    type Item = (String, Option<String>);
-    type IntoIter = IntoIter<String, Option<String>>;
+    type Item = (String, String);
+    type IntoIter = IntoIter<String, String>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
@@ -279,8 +276,8 @@ impl IntoIterator for Hstore {
 }
 
 impl<'a> IntoIterator for &'a Hstore {
-    type Item = (&'a String, &'a Option<String>);
-    type IntoIter = Iter<'a, String, Option<String>>;
+    type Item = (&'a String, &'a String);
+    type IntoIter = Iter<'a, String, String>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
@@ -288,24 +285,24 @@ impl<'a> IntoIterator for &'a Hstore {
 }
 
 impl<'a> IntoIterator for &'a mut Hstore {
-    type Item = (&'a String, &'a mut Option<String>);
-    type IntoIter = IterMut<'a, String, Option<String>>;
+    type Item = (&'a String, &'a mut String);
+    type IntoIter = IterMut<'a, String, String>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter_mut()
     }
 }
 
-impl FromIterator<(String, Option<String>)> for Hstore {
+impl FromIterator<(String, String)> for Hstore {
     fn from_iter<T>(iter: T) -> Hstore
-        where T: IntoIterator<Item = (String, Option<String>)>
+        where T: IntoIterator<Item = (String, String)>
     {
         Hstore(HashMap::from_iter(iter))
     }
 }
 
 impl<'a> Index<&'a str> for Hstore {
-    type Output = Option<String>;
+    type Output = String;
 
     #[inline]
     fn index(&self, index: &'a str) -> &Self::Output {
@@ -313,9 +310,9 @@ impl<'a> Index<&'a str> for Hstore {
     }
 }
 
-impl Extend<(String, Option<String>)> for Hstore {
+impl Extend<(String, String)> for Hstore {
     fn extend<T>(&mut self, iter: T)
-        where T: IntoIterator<Item = (String, Option<String>)>
+        where T: IntoIterator<Item = (String, String)>
     {
         self.0.extend(iter)
     }
@@ -384,7 +381,7 @@ mod impls {
             let mut map = HashMap::new();
 
             while let Some((k, v)) = entries.next()? {
-                map.insert(k.into(), v.map(|v| v.into()));
+                map.insert(k.into(), v.into());
             }
 
             Ok(Hstore(map))
@@ -409,13 +406,7 @@ mod impls {
                 count += 1;
 
                 write_pascal_string(&key, &mut buf)?;
-
-                match *value {
-                    Some(ref value) => {
-                        write_pascal_string(value, &mut buf)?;
-                    }
-                    None => buf.write_i32::<BigEndian>(-1).unwrap(),
-                }
+                write_pascal_string(&value, &mut buf)?;
             }
 
             let count = count as i32;
@@ -440,12 +431,8 @@ mod impls {
         buf: &'a [u8],
     }
 
-    impl<'a> FallibleIterator for HstoreIterator<'a> {
-        type Item = (&'a str, Option<&'a str>);
-        type Error = Box<StdError + Sync + Send>;
-
-        #[inline]
-        fn next(&mut self) -> Result<Option<Self::Item>, Self::Error> {
+    impl<'a> HstoreIterator<'a> {
+        fn consume(&mut self) -> Result<Option<(&'a str, Option<&'a str>)>, Box<StdError + Sync + Send>> {
             if self.remaining == 0 {
                 if !self.buf.is_empty() {
                     return Err("invalid buffer size".into());
@@ -475,6 +462,23 @@ mod impls {
             };
 
             Ok(Some((key, value)))
+        }
+    }
+
+    impl<'a> FallibleIterator for HstoreIterator<'a> {
+        type Item = (&'a str, &'a str);
+        type Error = Box<StdError + Sync + Send>;
+
+        #[inline]
+        fn next(&mut self) -> Result<Option<Self::Item>, Self::Error> {
+            while let Some(res) = self.consume()? {
+                match res {
+                    (key, Some(val)) => return Ok(Some((key, val))),
+                    _ => continue,
+                }
+            }
+
+            Ok(None)
         }
 
         #[inline]

@@ -56,9 +56,8 @@ fn metadata() {
     make_table(&db);
 
     let mut m = Hstore::new();
-    m.insert("Hello".into(), Some("There".into()));
-    m.insert("Again".into(), Some("Stuff".into()));
-    m.insert("NullVal".into(), None);
+    m.insert("Hello".into(), "There".into());
+    m.insert("Again".into(), "Stuff".into());
 
     let another = HasHstore {
         id: 2,
@@ -74,10 +73,9 @@ fn metadata() {
         .get_results(&db)
         .expect("To get data");
 
-    assert_eq!(data[0].store["a"], Some("1".to_string()));
-    assert_eq!(data[0].store["b"], Some("2".to_string()));
+    assert_eq!(data[0].store["a"], "1".to_string());
+    assert_eq!(data[0].store["b"], "2".to_string());
 
-    assert_eq!(data[1].store["Hello"], Some("There".to_string()));
-    assert_eq!(data[1].store["Again"], Some("Stuff".to_string()));
-    assert_eq!(data[1].store["NullVal"], None);
+    assert_eq!(data[1].store["Hello"], "There".to_string());
+    assert_eq!(data[1].store["Again"], "Stuff".to_string());
 }
