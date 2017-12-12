@@ -1,5 +1,5 @@
 [package]
-name = "diesel-hstore"
+name = "diesel_pg_hstore"
 version = "0.1.0"
 authors = ["Lori Holden <noreply@loriholden.com>"]
 

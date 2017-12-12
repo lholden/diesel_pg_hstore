@@ -1,15 +1,127 @@
+//! # Postgres Hstore for Diesel
+//!
+//! This crate provides an Hstore type for use with Diesel and Postgres.
+//!
+//! ## Usage
+//!
+//! Add diesel_pg_hstore to your `Cargo.toml`:
+//!
+//! ```toml
+//! [dependencies]
+//! diesel_pg_hstore = "*"
+//! ```
+//!
+//! Bring the crate into your project. (For example, from your `lib.rs` file)
+//! ```rust,ignore
+//! extern diesel_pg_hstore;
+//! ```
+//!
+//! ### Using the Hstore type with Diesel
+//!
+//! The type must be present in the `table!` definition for your schema. There is currently no easy
+//! way to provide this without explicitly adding it to each `table!` requiring the type manually.
+//!
+//! Once Diesel 1.0 is out of beta, Diesel will be providing the ability for both the
+//! `diesel print-schema` command and the `infer_schema!` macro to bring external types into scope.
+//! For now, I recommend *not* using the `infer_schema!` macro.
+//!
+//! If you are using the `diesel print-schema` command to regenerate your schema, you might consider
+//! creating a .patch file that contains the required `use diesel_pg_hstore::Hstore;` statements for
+//! bringing the `Hstore` type into scope as needed.
+//!
+//! Using Hstore with a `table!` statement:
+//!
+//! ```rust
+//! # #[macro_use] extern crate diesel;
+//! # extern crate diesel_pg_hstore;
+//! table! {
+//!   use diesel::types::*;
+//!   use diesel_pg_hstore::Hstore;
+//!
+//!   my_table {
+//!     id -> Integer,
+//!     some_other_column -> Text,
+//!     an_hstore -> Hstore,
+//!   }
+//! }
+//! # fn main() {}
+//! ```
+//!
+//! ### Using the Hstore type in your code
+//!
+//! ```rust
+//! #[macro_use] extern crate diesel;
+//! extern crate diesel_pg_hstore;
+//!
+//! use std::collections::HashMap;
+//! use diesel::prelude::*;
+//! use diesel_pg_hstore::Hstore;
+//!
+//! table! {
+//!   use diesel::types::*;
+//!   use diesel_pg_hstore::Hstore;
+//!
+//!   user_profile {
+//!     id -> Integer,
+//!     settings -> Hstore,
+//!   }
+//!
+//! }
+//!
+//! #[derive(Insertable, Debug, PartialEq)]
+//! #[table_name="user_profile"]
+//! struct NewUserProfile {
+//!    settings: Hstore,
+//! }
+//!
+//! fn main() {
+//!     let mut settings = HashMap::new();
+//!     settings.insert("Hello".to_string(), Some("World".to_string()));
+//!
+//!     let profile = NewUserProfile { settings: Hstore::from_hashmap(settings) };
+//! }
+//! ```
+//!
+//! For your convenience, the Hstore type also provides proxy methods to the standard `HashMap`
+//! functions.
+//!
+//! ```rust
+//! use diesel_pg_hstore::Hstore;
+//!
+//! let mut things = Hstore::new();
+//! things.insert("Hello".into(), Some("World".into()));
+//! ```
+//!
+//! ### Nullable hstore values
+//!
+//! The postgres hstore type allows nulls in the value fields. Because of this, we made a
+//! compromise by making the `Hstore` type a wrapper around `HashMap<String, Option<String>>`.
+//! We may consider adding a type in the future that instead of using Option for the value type
+//! instead explicitly throws an error when encountering NULL values.
+
 extern crate diesel;
 extern crate byteorder;
 extern crate fallible_iterator;
 
-use std::ops::{Index, Deref};
+use std::ops::{Index, Deref, DerefMut};
 use std::collections::HashMap;
 use std::collections::hash_map::*;
 use std::iter::FromIterator;
 
+/// The Hstore wrapper type.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Hstore(HashMap<String, Option<String>>);
 
+/// You can deref the Hstore into it's backing HashMap
+///
+/// ```rust
+/// use diesel_pg_hstore::Hstore;
+/// use std::collections::HashMap;
+///
+/// let mut settings = Hstore::new();
+/// settings.insert("Hello".into(), Some("World".into()));
+/// let hashmap: &HashMap<String, Option<String>> = &*settings;
+/// ```
 impl Deref for Hstore {
     type Target = HashMap<String, Option<String>>;
 
@@ -18,91 +130,139 @@ impl Deref for Hstore {
     }
 }
 
+/// You can mutably deref the Hstore into it's backing HashMap
+///
+/// ```rust
+/// use diesel_pg_hstore::Hstore;
+/// use std::collections::HashMap;
+///
+/// let mut settings = Hstore::new();
+/// settings.insert("Hello".into(), Some("World".into()));
+/// let mut hashmap: &mut HashMap<String, Option<String>> = &mut *settings;
+/// ```
+impl DerefMut for Hstore {
+    fn deref_mut(&mut self) -> &mut HashMap<String, Option<String>> {
+        &mut self.0
+    }
+}
+
 impl Hstore {
+    /// Create a new Hstore object
     pub fn new() -> Hstore {
         Hstore(HashMap::new())
     }
 
-    pub fn with_hashmap(hm: HashMap<String, Option<String>>) -> Hstore {
+    /// Create a new Hstore from an existing hashmap
+    ///
+    /// ```rust
+    /// use diesel_pg_hstore::Hstore;
+    /// use std::collections::HashMap;
+    ///
+    /// let mut settings = HashMap::new();
+    /// settings.insert("Hello".into(), Some("World".into()));
+    ///
+    /// let settings_hstore = Hstore::from_hashmap(settings);
+    /// ```
+    pub fn from_hashmap(hm: HashMap<String, Option<String>>) -> Hstore {
         Hstore(hm)
     }
 
+    /// Please see [HashMap.with_capacity](https://doc.rust-lang.org/std/collections/struct.HashMap.html#method.with_capacity)
     pub fn with_capacity(capacity: usize) -> Hstore {
         Hstore(HashMap::with_capacity(capacity))
     }
 
+    /// Please see [HashMap.capacity](#method.capacity-1)
     pub fn capacity(&self) -> usize {
         self.0.capacity()
     }
 
+    /// Please see [HashMap.reserve](#method.reserve-1)
     pub fn reserve(&mut self, additional: usize) {
         self.0.reserve(additional)
     }
 
+    /// Please see [HashMap.shrink_to_fit](#method.shrink_to_fit-1)
     pub fn shrink_to_fit(&mut self) {
         self.0.shrink_to_fit()
     }
 
+    /// Please see [HashMap.keys](#method.keys-1)
     pub fn keys(&self) -> Keys<String, Option<String>> {
         self.0.keys()
     }
 
+    /// Please see [HashMap.values](#method.values-1)
     pub fn values(&self) -> Values<String, Option<String>> {
         self.0.values()
     }
 
+    /// Please see [HashMap.values_mut](#method.values_mut-1)
     pub fn values_mut(&mut self) -> ValuesMut<String, Option<String>> {
         self.0.values_mut()
     }
 
+    /// Please see [HashMap.iter](#method.iter-1)
     pub fn iter(&self) -> Iter<String, Option<String>> {
         self.0.iter()
     }
 
+    /// Please see [HashMap.iter_mut](#method.iter_mut-1)
     pub fn iter_mut(&mut self) -> IterMut<String, Option<String>> {
         self.0.iter_mut()
     }
 
+    /// Please see [HashMap.entry](#method.entry-1)
     pub fn entry(&mut self, key: String) -> Entry<String, Option<String>> {
         self.0.entry(key)
     }
 
+    /// Please see [HashMap.len](#method.len-1)
     pub fn len(&self) -> usize {
         self.0.len()
     }
 
+    /// Please see [HashMap.is_empty](#method.is_empty-1)
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
+    /// Please see [HashMap.drain](#method.drain-1)
     pub fn drain(&mut self) -> Drain<String, Option<String>> {
         self.0.drain()
     }
 
+    /// Please see [HashMap.clear](#method.clear-1)
     pub fn clear(&mut self) {
         self.0.clear()
     }
 
+    /// Please see [HashMap.get](#method.gt-1)
     pub fn get(&self, k: &str) -> Option<&Option<String>> {
         self.0.get(k)
     }
 
+    /// Please see [HashMap.get_mut](#method.get_mut-1)
     pub fn get_mut(&mut self, k: &str) -> Option<&mut Option<String>> {
         self.0.get_mut(k)
     }
 
+    /// Please see [HashMap.contains_key](#method.contains_key-1)
     pub fn contains_key(&self, k: &str) -> bool {
         self.0.contains_key(k)
     }
 
+    /// Please see [HashMap.insert](#method.insert-1)
     pub fn insert(&mut self, k: String, v: Option<String>) -> Option<Option<String>> {
         self.0.insert(k, v)
     }
 
+    /// Please see [HashMap.remove](#method.remove-1)
     pub fn remove(&mut self, k: &str) -> Option<Option<String>> {
         self.0.remove(k)
     }
 
+    /// Please see [HashMap.retain](#method.retain-1)
     pub fn retain<F>(&mut self, f: F)
         where F: FnMut(&String, &mut Option<String>) -> bool
     {
@@ -164,7 +324,7 @@ impl Extend<(String, Option<String>)> for Hstore {
 
 mod impls {
     use std::str;
-    use std::error::Error;
+    use std::error::Error as StdError;
     use std::io::Write;
     use std::collections::HashMap;
     use fallible_iterator::FallibleIterator;
@@ -204,7 +364,7 @@ mod impls {
     }
 
     impl FromSql<Hstore, Pg> for Hstore {
-        fn from_sql(bytes: Option<&[u8]>) -> Result<Self, Box<Error + Send + Sync>> {
+        fn from_sql(bytes: Option<&[u8]>) -> Result<Self, Box<StdError + Send + Sync>> {
             let mut buf = match bytes {
                 Some(bytes) => bytes,
                 None => return Err(Box::new(UnexpectedNullError {
@@ -233,13 +393,13 @@ mod impls {
     }
 
     impl FromSqlRow<Hstore, Pg> for Hstore {
-        fn build_from_row<T: Row<Pg>>(row: &mut T) -> Result<Self, Box<Error + Send + Sync>> {
+        fn build_from_row<T: Row<Pg>>(row: &mut T) -> Result<Self, Box<StdError + Send + Sync>> {
             Hstore::from_sql(row.take())
         }
     }
 
     impl ToSql<Hstore, Pg> for Hstore {
-        fn to_sql<W>(&self, out: &mut ToSqlOutput<W, Pg>) -> Result<IsNull, Box<Error + Send + Sync>>
+        fn to_sql<W>(&self, out: &mut ToSqlOutput<W, Pg>) -> Result<IsNull, Box<StdError + Send + Sync>>
             where W: Write
         {
             let mut buf: Vec<u8> = Vec::new();
@@ -269,7 +429,7 @@ mod impls {
         }
     }
 
-    fn write_pascal_string(s: &str, buf: &mut Vec<u8>) -> Result<(), Box<Error + Sync + Send>> {
+    fn write_pascal_string(s: &str, buf: &mut Vec<u8>) -> Result<(), Box<StdError + Sync + Send>> {
         let size: i32 = s.len() as i32;
         buf.write_i32::<BigEndian>(size).unwrap();
         buf.extend_from_slice(s.as_bytes());
@@ -283,7 +443,7 @@ mod impls {
 
     impl<'a> FallibleIterator for HstoreIterator<'a> {
         type Item = (&'a str, Option<&'a str>);
-        type Error = Box<Error + Sync + Send>;
+        type Error = Box<StdError + Sync + Send>;
 
         #[inline]
         fn next(&mut self) -> Result<Option<Self::Item>, Self::Error> {

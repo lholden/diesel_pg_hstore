@@ -2,18 +2,17 @@
 
 #[macro_use]
 extern crate diesel;
-extern crate diesel_hstore;
+extern crate diesel_pg_hstore;
 extern crate dotenv;
 
 use std::env;
-use std::collections::HashMap;
 
 use diesel::prelude::*;
 use diesel::Connection;
 use diesel::pg::PgConnection;
 use diesel::connection::SimpleConnection;
 
-use diesel_hstore::Hstore;
+use diesel_pg_hstore::Hstore;
 
 fn connection() -> PgConnection {
     dotenv::dotenv().ok();
@@ -23,7 +22,7 @@ fn connection() -> PgConnection {
 
 table! {
     use diesel::types::*;
-    use diesel_hstore::Hstore;
+    use diesel_pg_hstore::Hstore;
 
     hstore_table {
         id -> Integer,
@@ -56,13 +55,14 @@ fn metadata() {
     let db = connection();
     make_table(&db);
 
-    let mut m = HashMap::new();
+    let mut m = Hstore::new();
     m.insert("Hello".into(), Some("There".into()));
     m.insert("Again".into(), Some("Stuff".into()));
+    m.insert("NullVal".into(), None);
 
     let another = HasHstore {
         id: 2,
-        store: Hstore::with_hashmap(m),
+        store: m,
     };
 
     diesel::insert_into(hstore_table::table)
@@ -79,4 +79,5 @@ fn metadata() {
 
     assert_eq!(data[1].store["Hello"], Some("There".to_string()));
     assert_eq!(data[1].store["Again"], Some("Stuff".to_string()));
+    assert_eq!(data[1].store["NullVal"], None);
 }
