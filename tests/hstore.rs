@@ -2,8 +2,6 @@
 
 #[macro_use]
 extern crate diesel;
-#[macro_use]
-extern crate diesel_codegen;
 extern crate diesel_hstore;
 extern crate dotenv;
 
@@ -15,22 +13,17 @@ use diesel::Connection;
 use diesel::pg::PgConnection;
 use diesel::connection::SimpleConnection;
 
-use diesel_hstore::HstoreHashMap;
-
-fn database_url_from_env(backend_specific_env_var: &str) -> String {
-    dotenv::dotenv().ok();
-    env::var(backend_specific_env_var)
-        .expect("DATABASE_URL must be set in order to run tests")
-}
+use diesel_hstore::Hstore;
 
 fn connection() -> PgConnection {
-    let database_url = database_url_from_env("PG_DATABASE_URL");
+    dotenv::dotenv().ok();
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL to be defined (may use .env)");
     PgConnection::establish(&database_url).unwrap()
 }
 
 table! {
     use diesel::types::*;
-    use diesel_hstore::Hstore;
+    use diesel_hstore::db::Hstore;
 
     hstore_table {
         id -> Integer,
@@ -42,7 +35,7 @@ table! {
 #[table_name = "hstore_table"]
 struct HasHstore {
     id: i32,
-    store: HstoreHashMap,
+    store: Hstore,
 }
 
 fn make_table(db: &PgConnection) {
@@ -69,11 +62,11 @@ fn metadata() {
 
     let another = HasHstore {
         id: 2,
-        store: HstoreHashMap::with_hashmap(m),
+        store: Hstore::with_hashmap(m),
     };
 
-    diesel::insert(&another)
-        .into(hstore_table::table)
+    diesel::insert_into(hstore_table::table)
+        .values(&another)
         .execute(&db)
         .expect("To insert data");
 

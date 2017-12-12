@@ -4,10 +4,9 @@ version = "0.1.0"
 authors = ["Lori Holden <noreply@loriholden.com>"]
 
 [dependencies]
-diesel = { version = "0.16", features = ["postgres"] }
-diesel_codegen = { version = "0.16", features = ["postgres"] }
-byteorder = "1.1"
-fallible-iterator = "0.1"
+diesel = { version = "~1.0.0-beta1", features = ["postgres"] }
+byteorder = "~1.2"
+fallible-iterator = "~0.1"
 
 [dev-dependencies]
-dotenv = "0.10"
+dotenv = "~0.10"

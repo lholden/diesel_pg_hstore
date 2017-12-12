@@ -7,13 +7,15 @@ use std::collections::HashMap;
 use std::collections::hash_map::*;
 use std::iter::FromIterator;
 
-#[derive(Debug, Clone, Copy, Default)]
-pub struct Hstore;
+pub mod db {
+    #[derive(Debug, Clone, Copy, Default)]
+    pub struct Hstore;
+}
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct HstoreHashMap(HashMap<String, Option<String>>);
+pub struct Hstore(HashMap<String, Option<String>>);
 
-impl Deref for HstoreHashMap {
+impl Deref for Hstore {
     type Target = HashMap<String, Option<String>>;
 
     fn deref(&self) -> &Self::Target {
@@ -21,17 +23,17 @@ impl Deref for HstoreHashMap {
     }
 }
 
-impl HstoreHashMap {
-    pub fn new() -> HstoreHashMap {
-        HstoreHashMap(HashMap::new())
+impl Hstore {
+    pub fn new() -> Hstore {
+        Hstore(HashMap::new())
     }
 
-    pub fn with_hashmap(hm: HashMap<String, Option<String>>) -> HstoreHashMap {
-        HstoreHashMap(hm)
+    pub fn with_hashmap(hm: HashMap<String, Option<String>>) -> Hstore {
+        Hstore(hm)
     }
 
-    pub fn with_capacity(capacity: usize) -> HstoreHashMap {
-        HstoreHashMap(HashMap::with_capacity(capacity))
+    pub fn with_capacity(capacity: usize) -> Hstore {
+        Hstore(HashMap::with_capacity(capacity))
     }
 
     pub fn capacity(&self) -> usize {
@@ -106,14 +108,14 @@ impl HstoreHashMap {
         self.0.remove(k)
     }
 
-    fn retain<F>(&mut self, f: F)
+    pub fn retain<F>(&mut self, f: F)
         where F: FnMut(&String, &mut Option<String>) -> bool
     {
         self.0.retain(f)
     }
 }
 
-impl IntoIterator for HstoreHashMap {
+impl IntoIterator for Hstore {
     type Item = (String, Option<String>);
     type IntoIter = IntoIter<String, Option<String>>;
 
@@ -122,7 +124,7 @@ impl IntoIterator for HstoreHashMap {
     }
 }
 
-impl<'a> IntoIterator for &'a HstoreHashMap {
+impl<'a> IntoIterator for &'a Hstore {
     type Item = (&'a String, &'a Option<String>);
     type IntoIter = Iter<'a, String, Option<String>>;
 
@@ -131,7 +133,7 @@ impl<'a> IntoIterator for &'a HstoreHashMap {
     }
 }
 
-impl<'a> IntoIterator for &'a mut HstoreHashMap {
+impl<'a> IntoIterator for &'a mut Hstore {
     type Item = (&'a String, &'a mut Option<String>);
     type IntoIter = IterMut<'a, String, Option<String>>;
 
@@ -140,15 +142,15 @@ impl<'a> IntoIterator for &'a mut HstoreHashMap {
     }
 }
 
-impl FromIterator<(String, Option<String>)> for HstoreHashMap {
-    fn from_iter<T>(iter: T) -> HstoreHashMap
+impl FromIterator<(String, Option<String>)> for Hstore {
+    fn from_iter<T>(iter: T) -> Hstore
         where T: IntoIterator<Item = (String, Option<String>)>
     {
-        HstoreHashMap(HashMap::from_iter(iter))
+        Hstore(HashMap::from_iter(iter))
     }
 }
 
-impl<'a> Index<&'a str> for HstoreHashMap {
+impl<'a> Index<&'a str> for Hstore {
     type Output = Option<String>;
 
     #[inline]
@@ -157,7 +159,7 @@ impl<'a> Index<&'a str> for HstoreHashMap {
     }
 }
 
-impl Extend<(String, Option<String>)> for HstoreHashMap {
+impl Extend<(String, Option<String>)> for Hstore {
     fn extend<T>(&mut self, iter: T)
         where T: IntoIterator<Item = (String, Option<String>)>
     {
@@ -180,17 +182,17 @@ mod impls {
     use diesel::row::Row;
     use diesel::types::*;
 
-    use super::{Hstore, HstoreHashMap};
+    use super::{db, Hstore};
 
-    impl HasSqlType<Hstore> for Pg {
+    impl HasSqlType<db::Hstore> for Pg {
         fn metadata(lookup: &Self::MetadataLookup) -> Self::TypeMetadata {
             lookup.lookup_type("hstore")
         }
     }
 
-    impl NotNull for Hstore {}
-    impl SingleValue for Hstore {}
-    impl Queryable<Hstore, Pg> for HstoreHashMap {
+    impl NotNull for db::Hstore {}
+    impl SingleValue for db::Hstore {}
+    impl Queryable<db::Hstore, Pg> for Hstore {
         type Row = Self;
 
         fn build(row: Self::Row) -> Self {
@@ -198,15 +200,15 @@ mod impls {
         }
     }
 
-    impl<'a> AsExpression<Hstore> for &'a HstoreHashMap {
-        type Expression = Bound<Hstore, &'a HstoreHashMap>;
+    impl<'a> AsExpression<db::Hstore> for &'a Hstore {
+        type Expression = Bound<db::Hstore, &'a Hstore>;
 
         fn as_expression(self) -> Self::Expression {
             Bound::new(self)
         }
     }
 
-    impl FromSql<Hstore, Pg> for HstoreHashMap {
+    impl FromSql<db::Hstore, Pg> for Hstore {
         fn from_sql(bytes: Option<&[u8]>) -> Result<Self, Box<Error + Send + Sync>> {
             let mut buf = match bytes {
                 Some(bytes) => bytes,
@@ -231,17 +233,17 @@ mod impls {
                 map.insert(k.into(), v.map(|v| v.into()));
             }
 
-            Ok(HstoreHashMap(map))
+            Ok(Hstore(map))
         }
     }
 
-    impl FromSqlRow<Hstore, Pg> for HstoreHashMap {
+    impl FromSqlRow<db::Hstore, Pg> for Hstore {
         fn build_from_row<T: Row<Pg>>(row: &mut T) -> Result<Self, Box<Error + Send + Sync>> {
-            HstoreHashMap::from_sql(row.take())
+            Hstore::from_sql(row.take())
         }
     }
 
-    impl ToSql<Hstore, Pg> for HstoreHashMap {
+    impl ToSql<db::Hstore, Pg> for Hstore {
         fn to_sql<W>(&self, out: &mut ToSqlOutput<W, Pg>) -> Result<IsNull, Box<Error + Send + Sync>>
             where W: Write
         {
