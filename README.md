@@ -60,16 +60,6 @@ use std::collections::HashMap;
 use diesel::prelude::*;
 use diesel_pg_hstore::Hstore;
 
-table! {
-    use diesel::types::*;
-    use diesel_pg_hstore::Hstore;
-
-    user_profile {
-        id -> Integer,
-        settings -> Hstore,
-    }
-}
-
 #[derive(Insertable, Debug, PartialEq)]
 #[table_name="user_profile"]
 struct NewUserProfile {
