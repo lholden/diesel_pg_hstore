@@ -3,6 +3,9 @@
 
 This crate provides an Hstore type for use with Diesel and Postgres.
 
+Currently only serializing to and from hstore columns is supported. If someone would be interested
+in building out support for the Postgres [hstore expression syntax](https://www.postgresql.org/docs/9.0/static/hstore.html), help would be appreciated!
+
 ## Usage
 
 Please see the [Documentation](https://docs.rs/diesel_pg_hstore/) for more details.
