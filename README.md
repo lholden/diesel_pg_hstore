@@ -78,7 +78,7 @@ struct NewUserProfile {
 
 fn main() {
     let mut settings = HashMap::new();
-    settings.insert("Hello".to_string(), Some("World".to_string()));
+    settings.insert("Hello".to_string(), "World".to_string());
 
     let profile = NewUserProfile { settings: Hstore::from_hashmap(settings) };
 }
