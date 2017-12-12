@@ -35,22 +35,7 @@ If you are using the `diesel print-schema` command to regenerate your schema, yo
 creating a .patch file that contains the required `use diesel_pg_hstore::Hstore;` statements for
 bringing the `Hstore` type into scope as needed.
 
-Using Hstore with a `table!` statement:
-
-```rust
-table! {
-    use diesel::types::*;
-    use diesel_pg_hstore::Hstore;
-
-    my_table {
-        id -> Integer,
-        some_other_column -> Text,
-        an_hstore -> Hstore,
-    }
-}
-```
-
-### Using the Hstore type in your code
+### Using the Hstore
 
 ```rust
 #[macro_use] extern crate diesel;
@@ -59,6 +44,16 @@ extern crate diesel_pg_hstore;
 use std::collections::HashMap;
 use diesel::prelude::*;
 use diesel_pg_hstore::Hstore;
+
+table! {
+    use diesel::types::*;
+    use diesel_pg_hstore::Hstore;
+
+    user_profile {
+        id -> Integer,
+        settings -> Hstore,
+    }
+}
 
 #[derive(Insertable, Debug, PartialEq)]
 #[table_name="user_profile"]
