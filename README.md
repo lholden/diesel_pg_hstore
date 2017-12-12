@@ -81,6 +81,9 @@ fn main() {
 }
 ```
 
+For your convenience, the Hstore type also provides proxy methods to the standard `HashMap`
+functions.
+
 ## License
 
 diesel_pg_hstore is licensed under either of
