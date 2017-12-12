@@ -35,14 +35,14 @@
 //! # #[macro_use] extern crate diesel;
 //! # extern crate diesel_pg_hstore;
 //! table! {
-//!   use diesel::types::*;
-//!   use diesel_pg_hstore::Hstore;
+//!     use diesel::types::*;
+//!     use diesel_pg_hstore::Hstore;
 //!
-//!   my_table {
-//!     id -> Integer,
-//!     some_other_column -> Text,
-//!     an_hstore -> Hstore,
-//!   }
+//!     my_table {
+//!         id -> Integer,
+//!         some_other_column -> Text,
+//!         an_hstore -> Hstore,
+//!     }
 //! }
 //! # fn main() {}
 //! ```
@@ -58,20 +58,19 @@
 //! use diesel_pg_hstore::Hstore;
 //!
 //! table! {
-//!   use diesel::types::*;
-//!   use diesel_pg_hstore::Hstore;
+//!     use diesel::types::*;
+//!     use diesel_pg_hstore::Hstore;
 //!
-//!   user_profile {
-//!     id -> Integer,
-//!     settings -> Hstore,
-//!   }
-//!
+//!     user_profile {
+//!         id -> Integer,
+//!         settings -> Hstore,
+//!     }
 //! }
 //!
 //! #[derive(Insertable, Debug, PartialEq)]
 //! #[table_name="user_profile"]
 //! struct NewUserProfile {
-//!    settings: Hstore,
+//!     settings: Hstore,
 //! }
 //!
 //! fn main() {
