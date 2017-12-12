@@ -35,8 +35,6 @@ If you are using the `diesel print-schema` command to regenerate your schema, yo
 creating a .patch file that contains the required `use diesel_pg_hstore::Hstore;` statements for
 bringing the `Hstore` type into scope as needed.
 
-### Using the Hstore
-
 ```rust
 #[macro_use] extern crate diesel;
 extern crate diesel_pg_hstore;
