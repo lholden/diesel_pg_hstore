@@ -2,6 +2,17 @@
 name = "diesel_pg_hstore"
 version = "0.1.0"
 authors = ["Lori Holden <noreply@loriholden.com>"]
+description = "Postgres Hstore support for Diesel"
+
+documentation = "https://docs.rs/diesel_pg_hstore/"
+repository = "https://github.com/lholden/diesel_pg_hstore"
+
+license = "MIT/Apache-2.0"
+
+readme = "README.md"
+keywords = ["diesel", "postgres", "hstore"]
+
+categories = ["database"]
 
 [dependencies]
 diesel = { version = "~1.0.0-beta1", features = ["postgres"] }

@@ -1,4 +1,4 @@
-//! # Postgres Hstore for Diesel
+//! # Postgres Hstore support for Diesel
 //!
 //! This crate provides an Hstore type for use with Diesel and Postgres.
 //!
