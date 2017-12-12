@@ -1,0 +1,13 @@
+[package]
+name = "diesel-hstore"
+version = "0.1.0"
+authors = ["Lori Holden <noreply@loriholden.com>"]
+
+[dependencies]
+diesel = { version = "0.16", features = ["postgres"] }
+diesel_codegen = { version = "0.16", features = ["postgres"] }
+byteorder = "1.1"
+fallible-iterator = "0.1"
+
+[dev-dependencies]
+dotenv = "0.10"
