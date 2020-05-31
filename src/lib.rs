@@ -358,23 +358,25 @@ mod impls {
     }
 
     impl<QS> AppearsOnTable<QS> for Hstore {
-        // NoOp - todo
     }
 
     impl<DB: diesel::backend::Backend> QueryFragment<DB> for Hstore {
         #[allow(unused_assignments)]
         fn walk_ast(&self, mut out: AstPass<DB>) -> QueryResult<()> {
-            // Blanket impl
-            /* let mut needs_comma = false;
-            $(
-                if !self.$idx.is_noop()? {
-                    if needs_comma {
-                        out.push_sql(", ");
-                    }
-                    self.$idx.walk_ast(out.reborrow())?;
-                    needs_comma = true;
+            // This is where we need to push out the data
+            let max = self.0.len();
+            let mut ind = 0;
+            out.push_sql("'");
+            for (k, v) in self.0.iter() {
+                let fmt = format!("{}=>{}", k, v);
+                out.push_sql(fmt.as_str());
+                if ind != max {
+                    // if not the last element, add a comma
+                    out.push_sql(",");
                 }
-            )+ */
+                ind = ind + 1;
+            }
+            out.push_sql("'::hstore");
             Ok(())
         }
     }
