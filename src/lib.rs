@@ -98,14 +98,16 @@
 extern crate diesel;
 extern crate byteorder;
 extern crate fallible_iterator;
+extern crate serde;
 
 use std::ops::{Index, Deref, DerefMut};
 use std::collections::HashMap;
 use std::collections::hash_map::*;
 use std::iter::FromIterator;
+use serde::{Serialize, Deserialize};
 
 /// The Hstore wrapper type.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Hstore(HashMap<String, String>);
 
 /// You can deref the Hstore into it's backing HashMap
