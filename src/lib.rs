@@ -325,7 +325,7 @@ mod impls {
     use std::collections::HashMap;
     use fallible_iterator::FallibleIterator;
     use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian};
-    use diesel::types::impls::option::UnexpectedNullError;
+    use diesel::result::Error::*;
     use diesel::Queryable;
     use diesel::expression::AsExpression;
     use diesel::expression::bound::Bound;
@@ -363,9 +363,7 @@ mod impls {
         fn from_sql(bytes: Option<&[u8]>) -> Result<Self, Box<StdError + Send + Sync>> {
             let mut buf = match bytes {
                 Some(bytes) => bytes,
-                None => return Err(Box::new(UnexpectedNullError {
-                    msg: "Unexpected null for non-null column".to_string(),
-                })),
+                None => return Err(Box::new(NotFound)),
             };
             let count = buf.read_i32::<BigEndian>()?;
 
