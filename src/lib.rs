@@ -327,11 +327,13 @@ mod impls {
     use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian};
     use diesel::result::Error::*;
     use diesel::Queryable;
-    use diesel::expression::AsExpression;
+    use diesel::query_builder::*;
+    use diesel::expression::{ Expression, AsExpression, AppearsOnTable};
     use diesel::expression::bound::Bound;
     use diesel::pg::Pg;
     use diesel::row::Row;
     use diesel::types::*;
+    use crate::diesel::result::QueryResult;
 
     use super::Hstore;
 
@@ -351,11 +353,29 @@ mod impls {
         }
     }
 
-    impl<'a> AsExpression<Hstore> for &'a Hstore {
-        type Expression = Bound<Hstore, &'a Hstore>;
+    impl Expression for Hstore {
+        type SqlType = Hstore;
+    }
 
-        fn as_expression(self) -> Self::Expression {
-            Bound::new(self)
+    impl<QS> AppearsOnTable<QS> for Hstore {
+        // NoOp - todo
+    }
+
+    impl<DB: diesel::backend::Backend> QueryFragment<DB> for Hstore {
+        #[allow(unused_assignments)]
+        fn walk_ast(&self, mut out: AstPass<DB>) -> QueryResult<()> {
+            // Blanket impl
+            /* let mut needs_comma = false;
+            $(
+                if !self.$idx.is_noop()? {
+                    if needs_comma {
+                        out.push_sql(", ");
+                    }
+                    self.$idx.walk_ast(out.reborrow())?;
+                    needs_comma = true;
+                }
+            )+ */
+            Ok(())
         }
     }
 
