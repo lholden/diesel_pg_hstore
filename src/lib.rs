@@ -98,14 +98,16 @@
 extern crate diesel;
 extern crate byteorder;
 extern crate fallible_iterator;
+extern crate serde_derive;
 
 use std::ops::{Index, Deref, DerefMut};
 use std::collections::HashMap;
 use std::collections::hash_map::*;
 use std::iter::FromIterator;
+use serde_derive::{Serialize, Deserialize};
 
 /// The Hstore wrapper type.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Hstore(HashMap<String, String>);
 
 /// You can deref the Hstore into it's backing HashMap
@@ -325,14 +327,15 @@ mod impls {
     use std::collections::HashMap;
     use fallible_iterator::FallibleIterator;
     use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian};
-    use diesel::types::impls::option::UnexpectedNullError;
+    use diesel::result::Error::*;
     use diesel::Queryable;
-    use diesel::expression::AsExpression;
+    use diesel::query_builder::*;
+    use diesel::expression::{ Expression, AsExpression, AppearsOnTable};
     use diesel::expression::bound::Bound;
     use diesel::pg::Pg;
     use diesel::row::Row;
     use diesel::types::*;
-
+    use crate::diesel::result::QueryResult;
     use super::Hstore;
 
     impl HasSqlType<Hstore> for Pg {
@@ -351,11 +354,31 @@ mod impls {
         }
     }
 
-    impl<'a> AsExpression<Hstore> for &'a Hstore {
-        type Expression = Bound<Hstore, &'a Hstore>;
+    impl Expression for Hstore {
+        type SqlType = Hstore;
+    }
 
-        fn as_expression(self) -> Self::Expression {
-            Bound::new(self)
+    impl<QS> AppearsOnTable<QS> for Hstore {
+    }
+
+    impl<DB: diesel::backend::Backend> QueryFragment<DB> for Hstore {
+        #[allow(unused_assignments)]
+        fn walk_ast(&self, mut out: AstPass<DB>) -> QueryResult<()> {
+            // This is where we need to push out the data
+            let max = self.0.len();
+            let mut ind = 0;
+            out.push_sql("'");
+            for (k, v) in self.0.iter() {
+                let fmt = format!("{}=>{}", k, v);
+                out.push_sql(fmt.as_str());
+                if ind != max {
+                    // if not the last element, add a comma
+                    out.push_sql(",");
+                }
+                ind = ind + 1;
+            }
+            out.push_sql("'::hstore");
+            Ok(())
         }
     }
 
@@ -363,9 +386,7 @@ mod impls {
         fn from_sql(bytes: Option<&[u8]>) -> Result<Self, Box<StdError + Send + Sync>> {
             let mut buf = match bytes {
                 Some(bytes) => bytes,
-                None => return Err(Box::new(UnexpectedNullError {
-                    msg: "Unexpected null for non-null column".to_string(),
-                })),
+                None => return Err(Box::new(NotFound)),
             };
             let count = buf.read_i32::<BigEndian>()?;
 
