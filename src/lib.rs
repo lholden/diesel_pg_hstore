@@ -98,13 +98,13 @@
 extern crate diesel;
 extern crate byteorder;
 extern crate fallible_iterator;
-extern crate serde;
+extern crate serde_derive;
 
 use std::ops::{Index, Deref, DerefMut};
 use std::collections::HashMap;
 use std::collections::hash_map::*;
 use std::iter::FromIterator;
-use serde::{Serialize, Deserialize};
+use serde_derive::{Serialize, Deserialize};
 
 /// The Hstore wrapper type.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -336,7 +336,6 @@ mod impls {
     use diesel::row::Row;
     use diesel::types::*;
     use crate::diesel::result::QueryResult;
-
     use super::Hstore;
 
     impl HasSqlType<Hstore> for Pg {
