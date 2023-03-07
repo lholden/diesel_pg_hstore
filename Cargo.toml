@@ -14,10 +14,15 @@ keywords = ["diesel", "postgres", "hstore"]
 
 categories = ["database"]
 
+[features]
+default = []
+serde_derive = []
+
 [dependencies]
 diesel = { version = "~2.0.0", features = ["postgres"] }
 byteorder = "~1.4"
 fallible-iterator = "~0.1"
+serde_derive = "1.0.152"
 
 [dev-dependencies]
 dotenv = "~0.10"

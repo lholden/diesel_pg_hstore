@@ -111,6 +111,7 @@ use diesel::sql_types::SqlType;
 /// The Hstore wrapper type.
 #[derive(Debug, Clone, Default, PartialEq, Eq, SqlType)]
 #[diesel(postgres_type(name = "hstore"))]
+#[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
 pub struct Hstore(HashMap<String, String>);
 
 /// You can deref the Hstore into it's backing HashMap
