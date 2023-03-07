@@ -1,16 +1,15 @@
 #![feature(test)]
 
-#[macro_use]
 extern crate diesel;
 extern crate diesel_pg_hstore;
 extern crate dotenv;
 
 use std::env;
 
+use diesel::connection::SimpleConnection;
+use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use diesel::Connection;
-use diesel::pg::PgConnection;
-use diesel::connection::SimpleConnection;
 
 use diesel_pg_hstore::Hstore;
 
@@ -21,7 +20,7 @@ fn connection() -> PgConnection {
 }
 
 table! {
-    use diesel::types::*;
+    use diesel::sql_types::*;
     use diesel_pg_hstore::Hstore;
 
     hstore_table {
@@ -31,14 +30,15 @@ table! {
 }
 
 #[derive(Insertable, Queryable, Identifiable, Debug, PartialEq)]
-#[table_name = "hstore_table"]
+#[diesel(table_name = hstore_table)]
 struct HasHstore {
     id: i32,
     store: Hstore,
 }
 
-fn make_table(db: &PgConnection) {
-    db.batch_execute(r#"
+fn make_table(db: &mut PgConnection) {
+    db.batch_execute(
+        r#"
         CREATE EXTENSION IF NOT EXISTS hstore;
         DROP TABLE IF EXISTS hstore_table;
         CREATE TABLE hstore_table (
@@ -47,30 +47,29 @@ fn make_table(db: &PgConnection) {
         );
         INSERT INTO hstore_table (id, store)
           VALUES (1, 'a=>1,b=>2'::hstore);
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 }
 
 #[test]
 fn metadata() {
-    let db = connection();
-    make_table(&db);
+    let mut db = connection();
+    make_table(&mut db);
 
     let mut m = Hstore::new();
     m.insert("Hello".into(), "There".into());
     m.insert("Again".into(), "Stuff".into());
 
-    let another = HasHstore {
-        id: 2,
-        store: m,
-    };
+    let another = HasHstore { id: 2, store: m };
 
     diesel::insert_into(hstore_table::table)
         .values(&another)
-        .execute(&db)
+        .execute(&mut db)
         .expect("To insert data");
 
     let data: Vec<HasHstore> = hstore_table::table
-        .get_results(&db)
+        .get_results(&mut db)
         .expect("To get data");
 
     assert_eq!(data[0].store["a"], "1".to_string());

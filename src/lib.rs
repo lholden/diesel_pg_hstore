@@ -21,9 +21,6 @@
 //! The type must be present in the `table!` definition for your schema. There is currently no easy
 //! way to provide this without explicitly adding it to each `table!` requiring the type manually.
 //!
-//! Once Diesel 1.0 is out of beta, Diesel will be providing the ability for both the
-//! `diesel print-schema` command and the `infer_schema!` macro to bring external types into scope.
-//! For now, I recommend *not* using the `infer_schema!` macro.
 //!
 //! If you are using the `diesel print-schema` command to regenerate your schema, you might consider
 //! creating a .patch file that contains the required `use diesel_pg_hstore::Hstore;` statements for
@@ -35,7 +32,7 @@
 //! # #[macro_use] extern crate diesel;
 //! # extern crate diesel_pg_hstore;
 //! table! {
-//!     use diesel::types::*;
+//!     use diesel::sql_types::*;
 //!     use diesel_pg_hstore::Hstore;
 //!
 //!     my_table {
@@ -58,7 +55,7 @@
 //! use diesel_pg_hstore::Hstore;
 //!
 //! table! {
-//!     use diesel::types::*;
+//!     use diesel::sql_types::*;
 //!     use diesel_pg_hstore::Hstore;
 //!
 //!     user_profile {
@@ -95,17 +92,25 @@
 //!
 //! Postgres hstore entries having a null value are simply ignored.
 
-extern crate diesel;
 extern crate byteorder;
+extern crate diesel;
 extern crate fallible_iterator;
+#[cfg(feature = "serde_derive")]
+extern crate serde_derive;
 
-use std::ops::{Index, Deref, DerefMut};
+use std::collections::hash_map::{Drain, Entry, IntoIter, Iter, IterMut, Keys, Values, ValuesMut};
 use std::collections::HashMap;
-use std::collections::hash_map::*;
 use std::iter::FromIterator;
+use std::ops::{Deref, DerefMut, Index};
+
+#[cfg(feature = "serde_derive")]
+use serde_derive::{Deserialize, Serialize};
+
+use diesel::sql_types::SqlType;
 
 /// The Hstore wrapper type.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, SqlType)]
+#[diesel(postgres_type(name = "hstore"))]
 pub struct Hstore(HashMap<String, String>);
 
 /// You can deref the Hstore into it's backing HashMap
@@ -260,7 +265,8 @@ impl Hstore {
 
     /// Please see [HashMap.retain](#method.retain-1)
     pub fn retain<F>(&mut self, f: F)
-        where F: FnMut(&String, &mut String) -> bool
+    where
+        F: FnMut(&String, &mut String) -> bool,
     {
         self.0.retain(f)
     }
@@ -295,7 +301,8 @@ impl<'a> IntoIterator for &'a mut Hstore {
 
 impl FromIterator<(String, String)> for Hstore {
     fn from_iter<T>(iter: T) -> Hstore
-        where T: IntoIterator<Item = (String, String)>
+    where
+        T: IntoIterator<Item = (String, String)>,
     {
         Hstore(HashMap::from_iter(iter))
     }
@@ -312,61 +319,47 @@ impl<'a> Index<&'a str> for Hstore {
 
 impl Extend<(String, String)> for Hstore {
     fn extend<T>(&mut self, iter: T)
-        where T: IntoIterator<Item = (String, String)>
+    where
+        T: IntoIterator<Item = (String, String)>,
     {
         self.0.extend(iter)
     }
 }
 
 mod impls {
-    use std::str;
+    use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+    use diesel::deserialize::{self, FromSql};
+    use diesel::expression::Expression;
+    use diesel::pg::{Pg, PgValue};
+    use diesel::query_builder::{AstPass, QueryFragment};
+    use diesel::result::QueryResult;
+    use diesel::serialize::{IsNull, Output, ToSql};
+    use diesel::{AppearsOnTable, Queryable};
+    use fallible_iterator::FallibleIterator;
+    use std::collections::HashMap;
     use std::error::Error as StdError;
     use std::io::Write;
-    use std::collections::HashMap;
-    use fallible_iterator::FallibleIterator;
-    use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian};
-    use diesel::types::impls::option::UnexpectedNullError;
-    use diesel::Queryable;
-    use diesel::expression::AsExpression;
-    use diesel::expression::bound::Bound;
-    use diesel::pg::Pg;
-    use diesel::row::Row;
-    use diesel::types::*;
+    use std::str;
 
     use super::Hstore;
 
-    impl HasSqlType<Hstore> for Pg {
-        fn metadata(lookup: &Self::MetadataLookup) -> Self::TypeMetadata {
-            lookup.lookup_type("hstore")
-        }
-    }
+    impl<QS> AppearsOnTable<QS> for Hstore {}
 
-    impl NotNull for Hstore {}
-    impl SingleValue for Hstore {}
     impl Queryable<Hstore, Pg> for Hstore {
         type Row = Self;
 
-        fn build(row: Self::Row) -> Self {
-            row
+        fn build(row: Self::Row) -> deserialize::Result<Self> {
+            Ok(row)
         }
     }
 
-    impl<'a> AsExpression<Hstore> for &'a Hstore {
-        type Expression = Bound<Hstore, &'a Hstore>;
-
-        fn as_expression(self) -> Self::Expression {
-            Bound::new(self)
-        }
+    impl Expression for Hstore {
+        type SqlType = Hstore;
     }
 
     impl FromSql<Hstore, Pg> for Hstore {
-        fn from_sql(bytes: Option<&[u8]>) -> Result<Self, Box<StdError + Send + Sync>> {
-            let mut buf = match bytes {
-                Some(bytes) => bytes,
-                None => return Err(Box::new(UnexpectedNullError {
-                    msg: "Unexpected null for non-null column".to_string(),
-                })),
-            };
+        fn from_sql(bytes: PgValue) -> deserialize::Result<Self> {
+            let mut buf = bytes.as_bytes();
             let count = buf.read_i32::<BigEndian>()?;
 
             if count < 0 {
@@ -388,16 +381,11 @@ mod impls {
         }
     }
 
-    impl FromSqlRow<Hstore, Pg> for Hstore {
-        fn build_from_row<T: Row<Pg>>(row: &mut T) -> Result<Self, Box<StdError + Send + Sync>> {
-            Hstore::from_sql(row.take())
-        }
-    }
-
     impl ToSql<Hstore, Pg> for Hstore {
-        fn to_sql<W>(&self, out: &mut ToSqlOutput<W, Pg>) -> Result<IsNull, Box<StdError + Send + Sync>>
-            where W: Write
-        {
+        fn to_sql<'b>(
+            &'b self,
+            out: &mut Output<'b, '_, Pg>,
+        ) -> Result<IsNull, Box<dyn StdError + Send + Sync>> {
             let mut buf: Vec<u8> = Vec::new();
             buf.extend_from_slice(&[0; 4]);
 
@@ -410,16 +398,33 @@ mod impls {
             }
 
             let count = count as i32;
-            (&mut buf[0..4])
-                .write_i32::<BigEndian>(count)
-                .unwrap();
+            (&mut buf[0..4]).write_i32::<BigEndian>(count).unwrap();
 
             out.write_all(&buf)?;
             Ok(IsNull::No)
         }
     }
 
-    fn write_pascal_string(s: &str, buf: &mut Vec<u8>) -> Result<(), Box<StdError + Sync + Send>> {
+    // Required for ExecuteDsl and LoadQuery
+    impl QueryFragment<Pg> for Hstore {
+        fn walk_ast<'b>(&'b self, mut pass: AstPass<'_, 'b, Pg>) -> QueryResult<()> {
+            let query_entries = self
+                .0
+                .iter()
+                .map(|(k, v)| format!("{}=>{}", k, v))
+                .reduce(|acc, e| acc + "," + &e)
+                .unwrap();
+            pass.push_sql("'");
+            pass.push_sql(query_entries.as_str());
+            pass.push_sql("'::hstore");
+            Ok(())
+        }
+    }
+
+    fn write_pascal_string(
+        s: &str,
+        buf: &mut Vec<u8>,
+    ) -> Result<(), Box<dyn StdError + Sync + Send>> {
         let size: i32 = s.len() as i32;
         buf.write_i32::<BigEndian>(size).unwrap();
         buf.extend_from_slice(s.as_bytes());
@@ -432,7 +437,9 @@ mod impls {
     }
 
     impl<'a> HstoreIterator<'a> {
-        fn consume(&mut self) -> Result<Option<(&'a str, Option<&'a str>)>, Box<StdError + Sync + Send>> {
+        fn consume(
+            &mut self,
+        ) -> Result<Option<(&'a str, Option<&'a str>)>, Box<dyn StdError + Sync + Send>> {
             if self.remaining == 0 {
                 if !self.buf.is_empty() {
                     return Err("invalid buffer size".into());
@@ -453,8 +460,7 @@ mod impls {
             let value_len = self.buf.read_i32::<BigEndian>()?;
             let value = if value_len < 0 {
                 None
-            }
-            else {
+            } else {
                 let (value, buf) = self.buf.split_at(value_len as usize);
                 let value = str::from_utf8(value)?;
                 self.buf = buf;
@@ -467,7 +473,7 @@ mod impls {
 
     impl<'a> FallibleIterator for HstoreIterator<'a> {
         type Item = (&'a str, &'a str);
-        type Error = Box<StdError + Sync + Send>;
+        type Error = Box<dyn StdError + Sync + Send>;
 
         #[inline]
         fn next(&mut self) -> Result<Option<Self::Item>, Self::Error> {
