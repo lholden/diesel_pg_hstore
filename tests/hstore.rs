@@ -7,14 +7,13 @@ extern crate dotenv;
 extern crate rstest;
 
 use std::env;
-use std::str;
 
 use diesel::connection::SimpleConnection;
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use diesel::Connection;
 
-use diesel_pg_hstore::Hstore;
+use diesel_pg_hstore::{Hstore, HstoreOpExtensions};
 
 table! {
     use diesel::sql_types::*;
@@ -61,6 +60,18 @@ fn db_transaction() -> PgConnection {
     conn
 }
 
+fn prepare_extra_rows(db_transaction: &mut PgConnection) {
+    let mut m = Hstore::new();
+    m.insert("c".into(), "3".into());
+    m.insert("d".into(), "4".into());
+
+    let another = HasHstore { id: 2, store: m };
+    diesel::insert_into(hstore_table::table)
+        .values(&another)
+        .execute(db_transaction)
+        .expect("To insert data");
+}
+
 #[rstest]
 fn metadata(mut db_transaction: PgConnection) {
     let mut m = Hstore::new();
@@ -102,4 +113,216 @@ fn update(mut db_transaction: PgConnection) {
     assert_eq!(updated[0].store.contains_key("b"), false);
     assert_eq!(updated[0].store["c"], "3".to_string());
     assert_eq!(updated[0].store["d"], "4".to_string());
+}
+
+#[rstest]
+fn test_operator_get(mut db_transaction: PgConnection) {
+    use hstore_table::dsl::{id, store};
+
+    let item: String = hstore_table::table
+        .select(store.get_value("a"))
+        .filter(id.eq(1))
+        .get_result(&mut db_transaction)
+        .unwrap();
+
+    assert_eq!(item, "1");
+
+    // XXX this requires Array<Text> to be able to handle
+    // NULL values, at least when using Vec<Option<String>>
+    //
+    // let items: Vec<String> = hstore_table::table
+    //     .select(store.get_array(vec!["a", "b", "c"]))
+    //     .filter(id.eq(1))
+    //     .get_result(&mut db_transaction)
+    //     .unwrap();
+
+    // assert_eq!(items, vec!["1", "2"]);
+}
+
+#[rstest]
+fn test_operator_concat(mut db_transaction: PgConnection) {
+    use hstore_table::dsl::store;
+
+    let mut m = Hstore::new();
+    m.insert("another".into(), "value".into());
+
+    let result: Vec<HasHstore> = diesel::update(hstore_table::table)
+        .set(store.eq(store.concat(m)))
+        .get_results(&mut db_transaction)
+        .unwrap();
+
+    assert_eq!(result[0].store["a"], "1".to_string());
+    assert_eq!(result[0].store["b"], "2".to_string());
+    assert_eq!(result[0].store["another"], "value".to_string());
+}
+
+#[rstest]
+fn test_operator_contains_key(mut db_transaction: PgConnection) {
+    use hstore_table::dsl::store;
+
+    prepare_extra_rows(&mut db_transaction);
+
+    let result: Vec<bool> = hstore_table::table
+        .select(store.has_key("a"))
+        .get_results(&mut db_transaction)
+        .unwrap();
+
+    assert_eq!(result.len(), 2);
+    assert_eq!(result[0], true);
+    assert_eq!(result[1], false);
+
+    let result: Vec<HasHstore> = hstore_table::table
+        .filter(store.has_key("a"))
+        .get_results(&mut db_transaction)
+        .unwrap();
+
+    assert_eq!(result.len(), 1);
+    assert_eq!(result[0].store["a"], "1".to_string());
+    assert_eq!(result[0].store["b"], "2".to_string());
+}
+
+#[rstest]
+fn test_operator_contains_all(mut db_transaction: PgConnection) {
+    use hstore_table::dsl::store;
+
+    prepare_extra_rows(&mut db_transaction);
+
+    let result: Vec<bool> = hstore_table::table
+        .select(store.has_all_keys(vec!["a", "b"]))
+        .get_results(&mut db_transaction)
+        .unwrap();
+
+    assert_eq!(result.len(), 2);
+    assert_eq!(result[0], true);
+    assert_eq!(result[1], false);
+
+    let result: Vec<bool> = hstore_table::table
+        .select(store.has_all_keys(vec!["a", "c"]))
+        .get_results(&mut db_transaction)
+        .unwrap();
+
+    assert_eq!(result.len(), 2);
+    assert_eq!(result[0], false);
+    assert_eq!(result[1], false);
+}
+
+#[rstest]
+fn test_operator_contains_any(mut db_transaction: PgConnection) {
+    use hstore_table::dsl::store;
+
+    prepare_extra_rows(&mut db_transaction);
+
+    let result: Vec<bool> = hstore_table::table
+        .select(store.has_any_keys(vec!["c", "b"]))
+        .get_results(&mut db_transaction)
+        .unwrap();
+
+    assert_eq!(result.len(), 2);
+    assert_eq!(result[0], true);
+    assert_eq!(result[1], true);
+
+    let result: Vec<bool> = hstore_table::table
+        .select(store.has_any_keys(vec!["a", "b"]))
+        .get_results(&mut db_transaction)
+        .unwrap();
+
+    assert_eq!(result.len(), 2);
+    assert_eq!(result[0], true);
+    assert_eq!(result[1], false);
+}
+
+#[rstest]
+fn test_operator_subset(mut db_transaction: PgConnection) {
+    use hstore_table::dsl::store;
+
+    prepare_extra_rows(&mut db_transaction);
+
+    let mut other = Hstore::new();
+    other.insert("a".into(), "1".into());
+
+    let result: Vec<HasHstore> = hstore_table::table
+        .filter(store.contains(&other))
+        .get_results(&mut db_transaction)
+        .unwrap();
+
+    assert_eq!(result.len(), 0);
+
+    let result: Vec<HasHstore> = hstore_table::table
+        .filter(store.is_contained_by(&other))
+        .get_results(&mut db_transaction)
+        .unwrap();
+
+    assert_eq!(result.len(), 1);
+    assert_eq!(result[0].store["a"], "1".to_string());
+    assert_eq!(result[0].store["b"], "2".to_string());
+}
+
+#[rstest]
+fn test_operator_remove(mut db_transaction: PgConnection) {
+    use hstore_table::dsl::store;
+
+    let result: Vec<HasHstore> = diesel::update(hstore_table::table)
+        .set(store.eq(store.remove_key("a")))
+        .get_results(&mut db_transaction)
+        .unwrap();
+
+    assert_eq!(result.len(), 1);
+    assert_eq!(result[0].store.contains_key("a"), false);
+    assert_eq!(result[0].store.contains_key("b"), true);
+}
+
+#[rstest]
+fn test_operator_remove_array(mut db_transaction: PgConnection) {
+    use hstore_table::dsl::store;
+
+    let result: Vec<HasHstore> = diesel::update(hstore_table::table)
+        .set(store.eq(store.remove_keys(vec!["a", "b"])))
+        .get_results(&mut db_transaction)
+        .unwrap();
+
+    assert_eq!(result.len(), 1);
+    assert_eq!(result[0].store.contains_key("a"), false);
+    assert_eq!(result[0].store.contains_key("b"), false);
+}
+
+#[rstest]
+fn test_operator_remove_hstore(mut db_transaction: PgConnection) {
+    use hstore_table::dsl::store;
+
+    let mut other = Hstore::new();
+    other.insert("a".into(), "something".into());
+
+    let result: Vec<HasHstore> = diesel::update(hstore_table::table)
+        .set(store.eq(store.difference(other)))
+        .get_results(&mut db_transaction)
+        .unwrap();
+
+    assert_eq!(result.len(), 1);
+    assert_eq!(result[0].store.contains_key("a"), true);
+    assert_eq!(result[0].store.contains_key("b"), true);
+
+    let mut other = Hstore::new();
+    other.insert("a".into(), "1".into());
+
+    let result: Vec<HasHstore> = diesel::update(hstore_table::table)
+        .set(store.eq(store.difference(other)))
+        .get_results(&mut db_transaction)
+        .unwrap();
+
+    assert_eq!(result.len(), 1);
+    assert_eq!(result[0].store.contains_key("a"), false);
+    assert_eq!(result[0].store.contains_key("b"), true);
+}
+
+#[rstest]
+fn test_operator_flatten(mut db_transaction: PgConnection) {
+    use hstore_table::dsl::store;
+
+    let result: Vec<String> = hstore_table::table
+        .select(store.to_flat_array())
+        .get_result(&mut db_transaction)
+        .unwrap();
+
+    assert_eq!(result.len(), 4);
+    assert_eq!(result, vec!["a", "1", "b", "2"]);
 }

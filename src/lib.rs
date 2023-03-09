@@ -106,10 +106,11 @@ use std::ops::{Deref, DerefMut, Index};
 #[cfg(feature = "serde_derive")]
 use serde_derive::{Deserialize, Serialize};
 
+use diesel::query_builder::QueryId;
 use diesel::sql_types::SqlType;
 
 /// The Hstore wrapper type.
-#[derive(Debug, Clone, Default, PartialEq, Eq, SqlType)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, SqlType, QueryId)]
 #[diesel(postgres_type(name = "hstore"))]
 #[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
 pub struct Hstore(HashMap<String, String>);
@@ -330,7 +331,7 @@ impl Extend<(String, String)> for Hstore {
 mod impls {
     use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
     use diesel::deserialize::{self, FromSql};
-    use diesel::expression::Expression;
+    use diesel::expression::{is_aggregate, Expression, ValidGrouping};
     use diesel::pg::{Pg, PgValue};
     use diesel::query_builder::{AstPass, QueryFragment};
     use diesel::result::QueryResult;
@@ -345,6 +346,10 @@ mod impls {
     use super::Hstore;
 
     impl<QS> AppearsOnTable<QS> for Hstore {}
+
+    impl<GroupByClause> ValidGrouping<GroupByClause> for Hstore {
+        type IsAggregate = is_aggregate::Never;
+    }
 
     impl Queryable<Hstore, Pg> for Hstore {
         type Row = Self;
@@ -495,3 +500,149 @@ mod impls {
         }
     }
 }
+
+/// Operators on the hstore type
+/// See [PostgreSQL hstore](https://www.postgresql.org/docs/current/hstore.html)
+mod predicates {
+    use super::Hstore;
+    use diesel::pg::Pg;
+    use diesel::sql_types::{Array, Bool, Text};
+
+    type TextArray = Array<Text>;
+
+    // hstore -> text → text
+    // Returns value associated with given key, or NULL if not present.
+    diesel::infix_operator!(HstoreGet, "->", Text, backend: Pg);
+
+    // hstore -> text[] → text[]
+    // Returns values associated with given keys, or NULL if not present.
+    diesel::infix_operator!(HstoreGetArray, "->", TextArray, backend: Pg);
+
+    // hstore || hstore → hstore
+    // Concatenates two hstores.
+    diesel::infix_operator!(HstoreConcat, "||", Hstore, backend: Pg);
+
+    // hstore ? text → boolean
+    // Does hstore contain key?
+    diesel::infix_operator!(HstoreHasKey, "?", Bool, backend: Pg);
+
+    // hstore ?& text[] → boolean
+    // Does hstore contain all the specified keys?
+    diesel::infix_operator!(HstoreHasAll, "?&", Bool, backend: Pg);
+
+    // hstore ?| text[] → boolean
+    // Does hstore contain any of the specified keys?
+    diesel::infix_operator!(HstoreHasAny, "?|", Bool, backend: Pg);
+
+    // hstore @> hstore → boolean
+    // Does left operand contain right?
+    diesel::infix_operator!(HstoreLeftSubset, "@>", Bool, backend: Pg);
+
+    // hstore <@ hstore → boolean
+    // Is left operand contained in right?
+    diesel::infix_operator!(HstoreRightSubset, "<@", Bool, backend: Pg);
+
+    // hstore - text → hstore
+    // hstore - text[] → hstore
+    // hstore - hstore → hstore
+    // Deletes key from left operand.
+    diesel::infix_operator!(HstoreRemove, "-", Hstore, backend: Pg);
+
+    // %% hstore → text[]
+    // Converts hstore to an array of alternating keys and values.
+    diesel::prefix_operator!(HstoreFlatten, "%%", Array<Text>, backend: Pg);
+
+    // anyelement #= hstore → anyelement
+    // Replaces fields in the left operand (which must be a composite type) with matching values from hstore.
+    // Not sure how to implement this
+
+    // %# hstore → text[]
+    // Converts hstore to a two-dimensional key/value array.
+    // 2D arrays are not supported in diesel, this should translate to a vec of tuples
+    // but it seems hard to implement in practice
+    // diesel::prefix_operator!(HstoreRecords, "%#", Array<Array<Text>>, backend: Pg);
+}
+
+mod dsl {
+    use super::Hstore;
+    use diesel::expression::{AsExpression, Expression};
+    use diesel::sql_types::{Array, Text};
+    use predicates::*;
+
+    pub trait HstoreOpExtensions: Expression<SqlType = Hstore> + Sized {
+        fn get_value<T: AsExpression<Text>>(self, other: T) -> HstoreGet<Self, T::Expression> {
+            HstoreGet::new(self, other.as_expression())
+        }
+
+        fn get_array<T: AsExpression<Array<Text>>>(
+            self,
+            other: T,
+        ) -> HstoreGetArray<Self, T::Expression> {
+            HstoreGetArray::new(self, other.as_expression())
+        }
+
+        fn concat<T: AsExpression<Hstore>>(self, other: T) -> HstoreConcat<Self, T::Expression> {
+            HstoreConcat::new(self, other.as_expression())
+        }
+
+        fn has_key<T: AsExpression<Text>>(self, other: T) -> HstoreHasKey<Self, T::Expression> {
+            HstoreHasKey::new(self, other.as_expression())
+        }
+
+        fn has_all_keys<T: AsExpression<Array<Text>>>(
+            self,
+            other: T,
+        ) -> HstoreHasAll<Self, T::Expression> {
+            HstoreHasAll::new(self, other.as_expression())
+        }
+
+        fn has_any_keys<T: AsExpression<Array<Text>>>(
+            self,
+            other: T,
+        ) -> HstoreHasAny<Self, T::Expression> {
+            HstoreHasAny::new(self, other.as_expression())
+        }
+
+        /// Implements Expression.contains() for Hstore
+        fn contains<T: AsExpression<Hstore>>(
+            self,
+            other: T,
+        ) -> HstoreRightSubset<Self, T::Expression> {
+            HstoreRightSubset::new(self, other.as_expression())
+        }
+
+        /// Implements Expression.is_contained_by() for Hstore
+        fn is_contained_by<T: AsExpression<Hstore>>(
+            self,
+            other: T,
+        ) -> HstoreLeftSubset<Self, T::Expression> {
+            HstoreLeftSubset::new(self, other.as_expression())
+        }
+
+        // There should be a way to merge these into a single generic remove()
+        // but my type-fu is too weak
+        fn remove_key<T: AsExpression<Text>>(self, other: T) -> HstoreRemove<Self, T::Expression> {
+            HstoreRemove::new(self, other.as_expression())
+        }
+        fn remove_keys<T: AsExpression<Array<Text>>>(
+            self,
+            other: T,
+        ) -> HstoreRemove<Self, T::Expression> {
+            HstoreRemove::new(self, other.as_expression())
+        }
+        fn difference<T: AsExpression<Hstore>>(
+            self,
+            other: T,
+        ) -> HstoreRemove<Self, T::Expression> {
+            HstoreRemove::new(self, other.as_expression())
+        }
+
+        fn to_flat_array(self) -> HstoreFlatten<Self> {
+            HstoreFlatten::new(self)
+        }
+    }
+
+    impl<T: Expression<SqlType = Hstore>> HstoreOpExtensions for T {}
+}
+
+pub use dsl::*;
