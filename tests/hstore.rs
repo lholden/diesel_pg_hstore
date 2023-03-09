@@ -326,3 +326,186 @@ fn test_operator_flatten(mut db_transaction: PgConnection) {
     assert_eq!(result.len(), 4);
     assert_eq!(result, vec!["a", "1", "b", "2"]);
 }
+
+#[rstest]
+fn test_fn_from_array(mut db_transaction: PgConnection) {
+    use diesel_pg_hstore::hstore_from_array;
+    use hstore_table::dsl::{id, store};
+
+    let result: HasHstore = diesel::update(hstore_table::table)
+        .set(store.eq(hstore_from_array(vec!["a", "10", "b", "20"])))
+        .filter(id.eq(1))
+        .get_result(&mut db_transaction)
+        .unwrap();
+
+    assert_eq!(result.store["a"], "10");
+    assert_eq!(result.store["b"], "20");
+}
+
+#[rstest]
+fn test_fn_from_kv_array(mut db_transaction: PgConnection) {
+    use diesel_pg_hstore::hstore_from_kv_array;
+    use hstore_table::dsl::{id, store};
+
+    let result: HasHstore = diesel::update(hstore_table::table)
+        .set(store.eq(hstore_from_kv_array(vec!["a", "b"], vec!["10", "20"])))
+        .filter(id.eq(1))
+        .get_result(&mut db_transaction)
+        .unwrap();
+
+    assert_eq!(result.store["a"], "10");
+    assert_eq!(result.store["b"], "20");
+}
+
+#[rstest]
+fn test_fn_from_kv(mut db_transaction: PgConnection) {
+    use diesel_pg_hstore::hstore_from_kv;
+    use hstore_table::dsl::{id, store};
+
+    let result: HasHstore = diesel::update(hstore_table::table)
+        .set(store.eq(hstore_from_kv("a", "10")))
+        .filter(id.eq(1))
+        .get_result(&mut db_transaction)
+        .unwrap();
+
+    assert_eq!(result.store.len(), 1);
+    assert_eq!(result.store["a"], "10");
+}
+
+#[rstest]
+fn test_fn_to_array(mut db_transaction: PgConnection) {
+    use diesel_pg_hstore::hstore_to_array;
+    use hstore_table::dsl::{id, store};
+
+    let result: Vec<String> = hstore_table::table
+        .select(hstore_to_array(store))
+        .filter(id.eq(1))
+        .get_result(&mut db_transaction)
+        .unwrap();
+
+    assert_eq!(result.len(), 4);
+    assert_eq!(result, vec!["a", "1", "b", "2"]);
+}
+
+#[rstest]
+fn test_fn_to_keys(mut db_transaction: PgConnection) {
+    use diesel_pg_hstore::hstore_to_keys;
+    use hstore_table::dsl::{id, store};
+
+    let result: Vec<String> = hstore_table::table
+        .select(hstore_to_keys(store))
+        .filter(id.eq(1))
+        .get_result(&mut db_transaction)
+        .unwrap();
+
+    assert_eq!(result.len(), 2);
+    assert_eq!(result, vec!["a", "b"]);
+}
+
+#[rstest]
+fn test_fn_slice(mut db_transaction: PgConnection) {
+    use diesel_pg_hstore::hstore_slice;
+    use hstore_table::dsl::{id, store};
+
+    let result: Hstore = hstore_table::table
+        .select(hstore_slice(store, vec!["b"]))
+        .filter(id.eq(1))
+        .get_result(&mut db_transaction)
+        .unwrap();
+
+    assert_eq!(result.len(), 1);
+    assert_eq!(result["b"], "2");
+}
+
+#[rstest]
+fn test_fn_exist(mut db_transaction: PgConnection) {
+    use diesel_pg_hstore::hstore_exist;
+    use hstore_table::dsl::{id, store};
+
+    let result: bool = hstore_table::table
+        .select(hstore_exist(store, "b"))
+        .filter(id.eq(1))
+        .get_result(&mut db_transaction)
+        .unwrap();
+
+    assert_eq!(result, true);
+
+    let result: bool = hstore_table::table
+        .select(hstore_exist(store, "c"))
+        .filter(id.eq(1))
+        .get_result(&mut db_transaction)
+        .unwrap();
+
+    assert_eq!(result, false);
+}
+
+// #[rstest]
+// fn test_fn_defined(mut db_transaction: PgConnection) {
+//     use hstore_table::dsl::{store, id};
+//     use diesel_pg_hstore::hstore_exist;
+
+//     let result: bool = hstore_table::table
+//         .select(hstore_exist(store, "b"))
+//         .filter(id.eq(1))
+//         .get_result(&mut db_transaction)
+//         .unwrap();
+
+//     assert_eq!(result, true);
+
+//     let result: bool = hstore_table::table
+//         .select(hstore_exist(store, "c"))
+//         .filter(id.eq(1))
+//         .get_result(&mut db_transaction)
+//         .unwrap();
+
+//     assert_eq!(result, false);
+// }
+
+#[rstest]
+fn test_fn_delete_key(mut db_transaction: PgConnection) {
+    use diesel_pg_hstore::hstore_delete_key;
+    use hstore_table::dsl::{id, store};
+
+    let result: HasHstore = diesel::update(hstore_table::table)
+        .set(store.eq(hstore_delete_key(store, "a")))
+        .filter(id.eq(1))
+        .get_result(&mut db_transaction)
+        .unwrap();
+
+    assert_eq!(result.store.len(), 1);
+    assert_eq!(result.store["b"], "2");
+}
+
+#[rstest]
+fn test_fn_delete_array(mut db_transaction: PgConnection) {
+    use diesel_pg_hstore::hstore_delete_array;
+    use hstore_table::dsl::{id, store};
+
+    let result: HasHstore = diesel::update(hstore_table::table)
+        .set(store.eq(hstore_delete_array(store, vec!["b"])))
+        .filter(id.eq(1))
+        .get_result(&mut db_transaction)
+        .unwrap();
+
+    assert_eq!(result.store.len(), 1);
+    assert_eq!(result.store["a"], "1");
+}
+
+#[rstest]
+fn test_fn_delete_matching(mut db_transaction: PgConnection) {
+    use diesel_pg_hstore::hstore_delete_matching;
+    use hstore_table::dsl::{id, store};
+
+    let mut to_remove = Hstore::new();
+    to_remove.insert("b".to_string(), "2".to_string());
+    to_remove.insert("c".to_string(), "3".to_string());
+
+    let result: HasHstore = diesel::update(hstore_table::table)
+        .set(store.eq(hstore_delete_matching(store, to_remove)))
+        .filter(id.eq(1))
+        .get_result(&mut db_transaction)
+        .unwrap();
+
+    assert_eq!(result.store.len(), 1);
+    assert_eq!(result.store["a"], "1");
+}
