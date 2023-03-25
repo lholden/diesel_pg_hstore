@@ -4,15 +4,15 @@ use std::iter::FromIterator;
 use std::ops::{Deref, DerefMut, Index};
 
 #[cfg(feature = "serde_derive")]
-use serde_derive::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 
 use diesel::query_builder::QueryId;
 use diesel::sql_types::SqlType;
 
 /// The Hstore wrapper type.
 #[derive(Debug, Clone, Default, PartialEq, Eq, SqlType, QueryId)]
-#[diesel(postgres_type(name = "hstore"))]
 #[cfg_attr(feature = "serde_derive", derive(Serialize, Deserialize))]
+#[diesel(postgres_type(name = "hstore"))]
 pub struct Hstore(HashMap<String, String>);
 
 /// You can deref the Hstore into it's backing HashMap

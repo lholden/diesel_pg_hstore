@@ -97,7 +97,7 @@ extern crate byteorder;
 extern crate diesel;
 extern crate fallible_iterator;
 #[cfg(feature = "serde_derive")]
-extern crate serde_derive;
+extern crate serde;
 
 mod dsl;
 mod functions;
